@@ -1,0 +1,44 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: ai-ticket-server
+  profiles:
+    active: dev
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_ticket?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+sa-token:
+  token-name: Authorization
+  timeout: 2592000
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: true
+
+app:
+  ai:
+    provider: deepseek   # mock / deepseek
+    stream-timeout-seconds: 120
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:your_deepseek_api_key_here}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}
+      chat-model: deepseek-chat
+      embed-model: text-embedding-v2
+  faq:
+    similarity-threshold: 0.72
+    semantic-search-enabled: true

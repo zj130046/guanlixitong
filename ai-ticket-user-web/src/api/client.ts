@@ -1,0 +1,44 @@
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+
+export const TOKEN_KEY = 'AI_TICKET_USER_TOKEN'
+
+export const http = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
+  timeout: 15000
+})
+
+http.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    config.headers.Authorization = token
+  }
+  return config
+})
+
+http.interceptors.response.use(
+  (response) => {
+    const body = response.data
+    if (body && typeof body.code === 'number' && body.code !== 0) {
+      // POST/PUT/DELETE 等写操作才弹错误提示
+      const method = response.config.method?.toUpperCase()
+      if (method !== 'GET') {
+        ElMessage.error(body.message || '请求失败')
+      }
+      return Promise.reject(new Error(body.message || '请求失败'))
+    }
+    return body?.data ?? body
+  },
+  (error) => {
+    const message = error.response?.data?.message || error.message || '网络异常'
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      localStorage.removeItem(TOKEN_KEY)
+    }
+    // 写操作才弹错误提示，GET 请求由页面自行处理空状态
+    const method = error.config?.method?.toUpperCase()
+    if (method !== 'GET') {
+      ElMessage.error(message)
+    }
+    return Promise.reject(error)
+  }
+)

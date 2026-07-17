@@ -1,0 +1,100 @@
+openapi: 3.0.3
+info:
+  title: AI 智能客服工单处理系统 API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080/api
+paths:
+  /health:
+    get:
+      summary: 健康检查
+      responses:
+        '200':
+          description: 服务正常
+  /user/auth/login:
+    post:
+      summary: 用户登录
+      tags: [Auth]
+      responses:
+        '200':
+          description: 登录成功
+  /agent/auth/login:
+    post:
+      summary: 客服登录
+      tags: [Auth]
+      responses:
+        '200':
+          description: 登录成功
+  /admin/auth/login:
+    post:
+      summary: 管理员登录
+      tags: [Auth]
+      responses:
+        '200':
+          description: 登录成功
+  /user/tickets:
+    get:
+      summary: 用户工单列表
+      tags: [Ticket]
+      responses:
+        '200':
+          description: 查询成功
+    post:
+      summary: 创建用户工单
+      tags: [Ticket]
+      responses:
+        '200':
+          description: 创建成功
+  /agent/tickets/pool:
+    get:
+      summary: 客服工单池
+      tags: [Ticket]
+      responses:
+        '200':
+          description: 查询成功
+  /chat/messages:
+    post:
+      summary: AI 普通问答
+      tags: [Chat]
+      responses:
+        '200':
+          description: 回复成功
+  /chat/stream:
+    get:
+      summary: AI 流式问答 SSE
+      tags: [Chat]
+      responses:
+        '200':
+          description: 流式回复
+  /chat/transfer-human:
+    post:
+      summary: 转人工
+      tags: [Chat]
+      responses:
+        '200':
+          description: 转接成功
+  /faq/entries:
+    get:
+      summary: FAQ 列表
+      tags: [FAQ]
+      responses:
+        '200':
+          description: 查询成功
+  /statistics/overview:
+    get:
+      summary: 统计概览
+      tags: [Statistics]
+      responses:
+        '200':
+          description: 查询成功
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          nullable: true
