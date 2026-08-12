@@ -1,21 +1,25 @@
 INSERT INTO sys_user (id, username, password_hash, phone, email, status) VALUES
-  (1, 'demo', 'demo123456', '13800000001', 'demo@example.com', 'ACTIVE'),
-  (2, 'student01', 'demo123456', '13800000002', 'student01@example.com', 'ACTIVE')
+  (1, 'user001', 'user123', '13800000001', 'user1@example.com', 'ACTIVE'),
+  (2, 'user002', 'user123', '13800000002', 'user2@example.com', 'ACTIVE'),
+  (3, 'user003', 'user123', '13800000003', 'user3@example.com', 'ACTIVE')
 ON DUPLICATE KEY UPDATE username = VALUES(username), password_hash = VALUES(password_hash), phone = VALUES(phone), email = VALUES(email), status = VALUES(status);
 
 INSERT INTO agent_group (id, name, scene) VALUES
-  (1, '校园后勤组', 'CAMPUS_REPAIR'),
-  (2, '电商售后组', 'ECOMMERCE_AFTERSALE'),
-  (3, '门店投诉组', 'STORE_COMPLAINT')
+  (1, '校园报修组', '校园报修'),
+  (2, '售后客服组', '产品售后'),
+  (3, '投诉建议组', '投诉建议'),
+  (4, '业务咨询组', 'AI 咨询')
 ON DUPLICATE KEY UPDATE name = VALUES(name), scene = VALUES(scene);
 
 INSERT INTO sys_agent (id, username, password_hash, real_name, online_status, group_id, role, status) VALUES
-  (1, 'agent', 'agent123456', '演示客服', 'ONLINE', 1, 'AGENT', 'ACTIVE'),
-  (2, 'agent2', 'agent123456', '售后客服', 'OFFLINE', 2, 'AGENT', 'ACTIVE')
+  (1, 'agent001', 'agent123', '张工', 'ONLINE', 1, 'LEADER', 'ACTIVE'),
+  (2, 'agent002', 'agent123', '李工', 'ONLINE', 1, 'AGENT', 'ACTIVE'),
+  (3, 'agent003', 'agent123', '王工', 'OFFLINE', 2, 'AGENT', 'ACTIVE'),
+  (4, 'agent004', 'agent123', '赵工', 'ONLINE', 2, 'AGENT', 'ACTIVE')
 ON DUPLICATE KEY UPDATE username = VALUES(username), password_hash = VALUES(password_hash), real_name = VALUES(real_name), online_status = VALUES(online_status), group_id = VALUES(group_id), role = VALUES(role), status = VALUES(status);
 
 INSERT INTO sys_admin (id, username, password_hash, real_name, status) VALUES
-  (1, 'admin', 'admin123456', '演示管理员', 'ACTIVE')
+  (1, 'admin', 'admin123', '系统管理员', 'ACTIVE')
 ON DUPLICATE KEY UPDATE username = VALUES(username), password_hash = VALUES(password_hash), real_name = VALUES(real_name), status = VALUES(status);
 
 INSERT INTO faq_category (id, name, sort_order) VALUES

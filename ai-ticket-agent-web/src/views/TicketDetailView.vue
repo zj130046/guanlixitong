@@ -46,6 +46,16 @@
             <el-icon><Close /></el-icon>
             驳回
           </el-button>
+          <el-button @click="handlePriorityDialog">
+            <el-icon><Warning /></el-icon>
+            调整优先级
+          </el-button>
+        </div>
+        <div class="top-actions" v-if="ticket?.status === 'COMPLETED'">
+          <el-button type="warning" @click="handleAction('archive')">
+            <el-icon><Folder /></el-icon>
+            归档
+          </el-button>
         </div>
       </el-card>
 
@@ -174,6 +184,26 @@
         >确认</el-button>
       </template>
     </el-dialog>
+
+    <!-- 调整优先级弹窗 -->
+    <el-dialog v-model="priorityDialog.visible" title="调整优先级" width="400px">
+      <el-form label-width="80px">
+        <el-form-item label="新优先级">
+          <el-select v-model="priorityDialog.priority" style="width: 100%">
+            <el-option label="低" value="LOW" />
+            <el-option label="普通" value="NORMAL" />
+            <el-option label="高" value="HIGH" />
+            <el-option label="紧急" value="URGENT" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="priorityDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="priorityLoading" @click="confirmPriority">
+          确认调整
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -183,10 +213,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Tickets, Clock, User, Operation, Setting,
-  Promotion, CircleCheck, Close
+  Promotion, CircleCheck, Close, Warning, Folder
 } from '@element-plus/icons-vue'
 import {
   getAgentTicket, processTicket, followTicket, completeTicket, rejectTicket,
+  archiveTicket, adjustPriority,
   statusColor, statusLabel, priorityColor, priorityLabel
 } from '../api/ticket'
 import type { Ticket, TicketEvent } from '../api/ticket'
@@ -206,18 +237,25 @@ const actionDialog = reactive({
   placeholder: ''
 })
 const actionForm = reactive({ remark: '' })
+const priorityLoading = ref(false)
+const priorityDialog = reactive({
+  visible: false,
+  priority: 'NORMAL'
+})
 
 const actionTitles: Record<string, string> = {
   process: '开始处理',
   follow: '标记跟进',
   complete: '完结工单',
-  reject: '驳回工单'
+  reject: '驳回工单',
+  archive: '归档工单'
 }
 const actionPlaceholders: Record<string, string> = {
   process: '请描述您将如何处理该工单（选填）',
   follow: '请输入跟进内容',
   complete: '请填写处理结果说明（选填）',
-  reject: '请填写驳回原因（必填）'
+  reject: '请填写驳回原因（必填）',
+  archive: '归档备注（选填）'
 }
 
 const reversedEvents = computed(() => [...(ticket.value?.events || [])].reverse())
@@ -278,6 +316,7 @@ async function confirmAction() {
       case 'follow': await followTicket(ticketId, actionForm.remark); break
       case 'complete': await completeTicket(ticketId, actionForm.remark); break
       case 'reject': await rejectTicket(ticketId, actionForm.remark); break
+      case 'archive': await archiveTicket(ticketId, actionForm.remark); break
     }
     ElMessage.success('操作成功')
     actionDialog.visible = false
@@ -287,11 +326,31 @@ async function confirmAction() {
   } finally { actionLoading.value = false }
 }
 
+function handlePriorityDialog() {
+  if (!ticket.value) return
+  priorityDialog.priority = ticket.value.priority || 'NORMAL'
+  priorityDialog.visible = true
+}
+
+async function confirmPriority() {
+  if (!ticket.value) return
+  priorityLoading.value = true
+  try {
+    await adjustPriority(ticket.value.id, priorityDialog.priority,
+      '优先级从 ' + (ticket.value.priority || 'NORMAL') + ' 调整为 ' + priorityDialog.priority)
+    ElMessage.success('优先级已调整')
+    priorityDialog.visible = false
+    loadDetail()
+  } catch (e: any) {
+    ElMessage.error(e.message || '调整失败')
+  } finally { priorityLoading.value = false }
+}
+
 function eventLabel(type: string) {
   const map: Record<string, string> = {
     CREATE: '工单创建', ACCEPT: '客服接单', PROCESS: '开始处理',
     FOLLOW: '持续跟进', COMPLETE: '工单完结', REJECT: '工单驳回',
-    ADMIN_UPDATE: '管理员更新', TRANSFER: '工单转派'
+    ADMIN_UPDATE: '管理员更新', ARCHIVE: '工单归档', TRANSFER: '工单转派'
   }
   return map[type] || type
 }

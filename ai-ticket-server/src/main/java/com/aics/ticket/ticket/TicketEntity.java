@@ -19,6 +19,8 @@ public class TicketEntity {
     public Long userId;
     public Long assigneeAgentId;
     public Long conversationId;
+    /** 附件 URL 列表，JSON 数组字符串，如 ["url1","url2"] */
+    public String attachmentUrls;
     public LocalDateTime timeoutAt;
     public LocalDateTime completedAt;
     public LocalDateTime createdAt;

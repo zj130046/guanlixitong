@@ -32,12 +32,20 @@ sa-token:
 
 app:
   ai:
-    provider: deepseek   # mock / deepseek
+    provider: deepseek            # mock | deepseek | dashscope
+    embedding-provider: dashscope # mock | dashscope（deepseek 无 embedding API）
+    system-prompt: 你是一个智能客服助手，需要礼貌、专业、简洁地回答用户问题。如果遇到无法解答的问题，请引导用户转人工客服。
     stream-timeout-seconds: 120
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY:your_deepseek_api_key_here}
-      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}   # 只写 host，勿带 /v1（completions-path 单独配）
+      completions-path: /v1/chat/completions
       chat-model: deepseek-chat
+      temperature: 0.7
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:}
+      base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com}
+      chat-model: qwen-plus
       embed-model: text-embedding-v2
   faq:
     similarity-threshold: 0.72

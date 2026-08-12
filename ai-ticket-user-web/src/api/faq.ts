@@ -33,3 +33,8 @@ export function listFaqEntries(params?: { keyword?: string; categoryId?: number 
 export function getFaqEntries(params?: { page?: number; size?: number; keyword?: string; categoryId?: number }) {
   return http.get<{ records: FaqEntry[]; total: number }, { records: FaqEntry[]; total: number }>('/faq/entries', { params })
 }
+
+/** 提交 FAQ 反馈（有帮助/无帮助） */
+export function submitFaqFeedback(entryId: number, helpful: boolean) {
+  return http.post(`/faq/${entryId}/feedback`, { helpful })
+}

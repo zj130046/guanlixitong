@@ -13,6 +13,9 @@
         <el-button type="primary" size="large" class="login-button" :loading="loading" @click="handleLogin">
           登录
         </el-button>
+        <div class="login-links">
+          <span style="color:#94a3b8;font-size:13px">忘记密码请联系系统管理员</span>
+        </div>
       </el-form>
     </el-card>
   </div>
@@ -28,8 +31,8 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({
-  username: 'demo',
-  password: 'demo123456'
+  username: 'agent001',
+  password: 'agent123'
 })
 
 async function handleLogin() {
@@ -50,4 +53,5 @@ async function handleLogin() {
 .login-card h1 { margin: 0 0 8px; font-size: 26px; }
 .login-card p { margin: 0 0 24px; color: #64748b; line-height: 1.6; }
 .login-button { width: 100%; }
+.login-links { display: flex; justify-content: center; margin-top: 12px; }
 </style>

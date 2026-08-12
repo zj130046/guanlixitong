@@ -2,6 +2,7 @@ package com.aics.ticket.common;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -10,6 +11,37 @@ import java.util.List;
 public class VectorUtils {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** Spring AI EmbeddingModel 返回 float[]，提供 float[] 版余弦相似度 */
+    public static double cosineSimilarity(float[] a, float[] b) {
+        if (a == null || b == null || a.length != b.length || a.length == 0) {
+            return 0.0;
+        }
+        double dot = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        if (normA == 0 || normB == 0) return 0.0;
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    public static List<Double> toList(float[] arr) {
+        if (arr == null) return null;
+        List<Double> list = new ArrayList<>(arr.length);
+        for (float v : arr) list.add((double) v);
+        return list;
+    }
+
+    public static float[] toFloatArray(List<Double> list) {
+        if (list == null) return null;
+        float[] arr = new float[list.size()];
+        for (int i = 0; i < list.size(); i++) arr[i] = list.get(i).floatValue();
+        return arr;
+    }
 
     public static double cosineSimilarity(List<Double> a, List<Double> b) {
         if (a == null || b == null || a.size() != b.size() || a.isEmpty()) {

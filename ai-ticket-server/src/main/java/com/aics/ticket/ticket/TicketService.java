@@ -18,9 +18,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -64,6 +66,7 @@ public class TicketService {
         ticket.source = source.name();
         ticket.userId = userId;
         ticket.conversationId = conversationId;
+        ticket.attachmentUrls = request.getAttachmentUrls();
         ticket.timeoutAt = LocalDateTime.now().plusHours(priorityHours(ticket.priority));
 
         // 自动分配
@@ -72,7 +75,7 @@ public class TicketService {
             ticket.assigneeAgentId = assignedAgentId;
             ticket.status = TicketStatus.ASSIGNED.name();
         } else {
-            ticket.status = TicketStatus.ASSIGNED.name(); // 进公共池
+            ticket.status = TicketStatus.CREATED.name(); // 进入公共待接单池
         }
 
         ticketMapper.insert(ticket);
@@ -147,7 +150,7 @@ public class TicketService {
 
     public PageResponse<TicketRecord> pool(int page, int size, String category, String priority) {
         QueryWrapper<TicketEntity> wrapper = new QueryWrapper<TicketEntity>()
-            .eq("status", TicketStatus.ASSIGNED.name())
+            .eq("status", TicketStatus.CREATED.name())
             .isNull("assignee_agent_id")
             .orderByDesc("created_at");
         if (StringUtils.hasText(category)) wrapper.eq("category", category);
@@ -200,7 +203,8 @@ public class TicketService {
     @Transactional
     public TicketRecord accept(Long id, String operator) {
         TicketEntity ticket = getEntity(id);
-        if (!TicketStatus.ASSIGNED.name().equals(ticket.status)) {
+        if (!TicketStatus.ASSIGNED.name().equals(ticket.status)
+                && !TicketStatus.CREATED.name().equals(ticket.status)) {
             throw new BusinessException("只有待接单工单可以接单");
         }
         Long agentId = CurrentIdentity.currentIdOrDefault("AGENT", 1L);
@@ -237,6 +241,117 @@ public class TicketService {
             StringUtils.hasText(remark) ? remark : "工单已驳回");
     }
 
+    /**
+     * 坐席完结后，管理员或坐席可将已完成工单归档
+     */
+    @Transactional
+    public TicketRecord archive(Long id, String remark) {
+        TicketEntity ticket = getEntity(id);
+        if (!TicketStatus.COMPLETED.name().equals(ticket.status)) {
+            throw new BusinessException("只有已完结的工单才能归档");
+        }
+        Long agentId = CurrentIdentity.currentIdOrDefault("AGENT", 1L);
+        String from = ticket.status;
+        ticket.status = TicketStatus.ARCHIVED.name();
+        ticketMapper.updateById(ticket);
+        addEvent(ticket.id, "ARCHIVE", from, ticket.status, "AGENT", agentId,
+            StringUtils.hasText(remark) ? remark : "工单已归档");
+        return toRecord(getEntity(id), true);
+    }
+
+    /**
+     * 坐席申请调整工单优先级（记录事件，实际修改由管理员审核）
+     */
+    @Transactional
+    public TicketRecord adjustPriority(Long id, String newPriority, String remark) {
+        TicketEntity ticket = getEntity(id);
+        // 校验优先级合法性
+        try {
+            TicketPriority.valueOf(newPriority);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("无效的优先级: " + newPriority);
+        }
+        String oldPriority = ticket.priority;
+        ticket.priority = newPriority;
+        // 同步更新超时时间
+        ticket.timeoutAt = LocalDateTime.now().plusHours(priorityHours(newPriority));
+        ticketMapper.updateById(ticket);
+        Long agentId = CurrentIdentity.currentIdOrDefault("AGENT", 1L);
+        addEvent(ticket.id, "ADMIN_UPDATE", oldPriority, newPriority, "AGENT", agentId,
+            StringUtils.hasText(remark) ? remark : "优先级从 " + oldPriority + " 调整为 " + newPriority);
+        return toRecord(getEntity(id), true);
+    }
+
+    /**
+     * 工单导出 CSV（管理端）
+     *
+     * @return CSV 文本内容
+     */
+    public String exportCsv(String status, String category, String priority,
+                            String keyword, Long agentId) {
+        QueryWrapper<TicketEntity> wrapper = new QueryWrapper<TicketEntity>().orderByDesc("created_at");
+        if (StringUtils.hasText(status)) wrapper.eq("status", status);
+        if (StringUtils.hasText(category)) wrapper.eq("category", category);
+        if (StringUtils.hasText(priority)) wrapper.eq("priority", priority);
+        if (agentId != null) wrapper.eq("assignee_agent_id", agentId);
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w.like("title", keyword).or().like("description", keyword));
+        }
+        List<TicketEntity> tickets = ticketMapper.selectList(wrapper);
+
+        // 批量预加载用户名和坐席名，避免 N+1 查询
+        Map<Long, String> userNames = batchRequesterNames(tickets);
+        Map<Long, String> agentNames = batchAgentNames(tickets);
+
+        // CSV BOM for Excel UTF-8 compatibility
+        StringBuilder sb = new StringBuilder("﻿");
+        sb.append("工单编号,标题,分类,部门,优先级,状态,来源,提交人,处理人,超时时间,完结时间,创建时间,更新时间\n");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        for (TicketEntity t : tickets) {
+            StringJoiner row = new StringJoiner(",");
+            row.add(String.valueOf(t.id));
+            row.add(csvEscape(t.title));
+            row.add(csvEscape(t.category));
+            row.add(csvEscape(t.department));
+            row.add(csvEscape(t.priority));
+            row.add(csvEscape(statusLabel(t.status)));
+            row.add(csvEscape(t.source));
+            row.add(csvEscape(t.userId != null ? userNames.getOrDefault(t.userId, "用户" + t.userId) : ""));
+            row.add(csvEscape(t.assigneeAgentId != null ? agentNames.getOrDefault(t.assigneeAgentId, "客服" + t.assigneeAgentId) : "待接单"));
+            row.add(t.timeoutAt != null ? fmt.format(t.timeoutAt) : "");
+            row.add(t.completedAt != null ? fmt.format(t.completedAt) : "");
+            row.add(t.createdAt != null ? fmt.format(t.createdAt) : "");
+            row.add(t.updatedAt != null ? fmt.format(t.updatedAt) : "");
+            sb.append(row).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private String csvEscape(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
+    /** 批量加载用户名映射，避免 N+1 */
+    private Map<Long, String> batchRequesterNames(List<TicketEntity> tickets) {
+        List<Long> ids = tickets.stream().map(t -> t.userId).filter(id -> id != null).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        return userMapper.selectBatchIds(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(u -> u.id, u -> u.username, (a, b) -> a));
+    }
+
+    /** 批量加载坐席名映射，避免 N+1 */
+    private Map<Long, String> batchAgentNames(List<TicketEntity> tickets) {
+        List<Long> ids = tickets.stream().map(t -> t.assigneeAgentId).filter(id -> id != null).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        return agentMapper.selectBatchIds(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        a -> a.id, a -> StringUtils.hasText(a.realName) ? a.realName : a.username, (x, y) -> x));
+    }
+
     @Transactional
     public TicketRecord adminUpdate(Long id, Map<String, Object> request) {
         TicketEntity ticket = getEntity(id);
@@ -271,6 +386,7 @@ public class TicketService {
         return ticketMapper.selectList(new QueryWrapper<TicketEntity>()
                         .ne("status", TicketStatus.COMPLETED.name())
                         .ne("status", TicketStatus.REJECTED.name())
+                        .ne("status", TicketStatus.ARCHIVED.name())
                         .le("timeout_at", LocalDateTime.now().plusHours(4))
                         .orderByAsc("timeout_at"))
                 .stream().map(t -> toRecord(t, false)).toList();
@@ -356,17 +472,17 @@ public class TicketService {
      * 工单状态分布
      */
     public List<Map<String, Object>> statusDistribution() {
-        List<TicketEntity> all = ticketMapper.selectList(new QueryWrapper<>());
-        Map<String, Integer> countMap = new HashMap<>();
-        for (TicketEntity t : all) {
-            countMap.merge(t.status, 1, Integer::sum);
-        }
-        return countMap.entrySet().stream()
-            .map(e -> {
+        // 使用 SQL GROUP BY 聚合，避免全表加载到内存
+        QueryWrapper<TicketEntity> wrapper = new QueryWrapper<TicketEntity>()
+                .select("status", "COUNT(*) AS cnt")
+                .groupBy("status");
+        return ticketMapper.selectMaps(wrapper).stream()
+            .map(row -> {
                 Map<String, Object> m = new HashMap<>();
-                m.put("name", statusLabel(e.getKey()));
-                m.put("value", e.getValue());
-                m.put("status", e.getKey());
+                String status = String.valueOf(row.get("status"));
+                m.put("name", statusLabel(status));
+                m.put("value", row.get("cnt"));
+                m.put("status", status);
                 return m;
             }).toList();
     }
@@ -375,17 +491,18 @@ public class TicketService {
      * 工单分类分布
      */
     public List<Map<String, Object>> categoryDistribution() {
-        List<TicketEntity> all = ticketMapper.selectList(new QueryWrapper<>());
-        Map<String, Integer> countMap = new HashMap<>();
-        for (TicketEntity t : all) {
-            String cat = StringUtils.hasText(t.category) ? t.category : "未分类";
-            countMap.merge(cat, 1, Integer::sum);
-        }
-        return countMap.entrySet().stream()
-            .map(e -> {
+        // 使用 SQL GROUP BY 聚合，避免全表加载到内存
+        QueryWrapper<TicketEntity> wrapper = new QueryWrapper<TicketEntity>()
+                .select("category", "COUNT(*) AS cnt")
+                .groupBy("category");
+        return ticketMapper.selectMaps(wrapper).stream()
+            .map(row -> {
                 Map<String, Object> m = new HashMap<>();
-                m.put("name", e.getKey());
-                m.put("value", e.getValue());
+                String cat = row.get("category") != null
+                        && !String.valueOf(row.get("category")).isEmpty()
+                        ? String.valueOf(row.get("category")) : "未分类";
+                m.put("name", cat);
+                m.put("value", row.get("cnt"));
                 return m;
             }).toList();
     }
@@ -436,6 +553,7 @@ public class TicketService {
         record.setUserId(ticket.userId);
         record.setAssigneeAgentId(ticket.assigneeAgentId);
         record.setConversationId(ticket.conversationId);
+        record.setAttachmentUrls(ticket.attachmentUrls);
         record.setTimeoutAt(ticket.timeoutAt);
         record.setCompletedAt(ticket.completedAt);
         record.setCreatedAt(ticket.createdAt);

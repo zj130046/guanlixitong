@@ -89,10 +89,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { rebuildFaqVectors, testFaqMatch } from '../api/ticket'
+import { rebuildFaqVectors, testFaqMatch, getFaqConfig } from '../api/ticket'
 
 const form = reactive({
   enabled: true,
@@ -106,8 +106,17 @@ const testQuestion = ref('')
 const testing = ref(false)
 const testResult = ref<any>(null)
 
+onMounted(async () => {
+  try {
+    const config = await getFaqConfig()
+    form.enabled = config.semanticSearchEnabled ?? true
+    form.threshold = config.similarityThreshold ?? 0.72
+  } catch (e) { /* use defaults */ }
+})
+
 function handleSave() {
-  ElMessage.success('配置已保存')
+  // 当前配置由 application.yml 管理，运行时不可通过 API 修改
+  ElMessage.info('当前阈值和语义搜索开关由服务端 application.yml 配置管理，如需修改请联系管理员')
 }
 
 async function handleRebuild() {
@@ -115,7 +124,7 @@ async function handleRebuild() {
     const res = await rebuildFaqVectors() as any
     ElMessage.success(`向量重建完成，更新 ${res.rebuilt || 0} 条`)
   } catch (e: any) {
-    ElMessage.success('向量重建任务已提交')
+    ElMessage.error(e.message || '向量重建失败')
   }
 }
 
@@ -127,16 +136,9 @@ async function handleTest() {
   testing.value = true
   try {
     testResult.value = await testFaqMatch(testQuestion.value)
-  } catch (e) {
-    // mock
-    testResult.value = {
-      matched: true,
-      faqId: 1,
-      question: '宿舍水管漏水怎么办？',
-      answer: '您好，宿舍水管漏水请立即拨打后勤报修电话 12345，或在本平台提交工单，维修人员会在 2 小时内上门处理。',
-      score: 0.86,
-      matchType: 'semantic'
-    }
+  } catch (e: any) {
+    ElMessage.error(e.message || '匹配测试失败，请确认 AI 服务是否可用')
+    testResult.value = null
   } finally { testing.value = false }
 }
 

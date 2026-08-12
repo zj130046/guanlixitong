@@ -1,6 +1,5 @@
 package com.aics.ticket.kb;
 
-import com.aics.ticket.ai.AiChatClient;
 import com.aics.ticket.common.BusinessException;
 import com.aics.ticket.common.VectorUtils;
 import com.aics.ticket.kb.mapper.FaqCategoryMapper;
@@ -12,6 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -21,7 +21,7 @@ public class FaqService {
 
     private final FaqCategoryMapper categoryMapper;
     private final FaqEntryMapper entryMapper;
-    private final AiChatClient aiChatClient;
+    private final EmbeddingModel embeddingModel;
 
     @Value("${app.faq.similarity-threshold:0.72}")
     private double similarityThreshold;
@@ -29,10 +29,10 @@ public class FaqService {
     @Value("${app.faq.semantic-search-enabled:true}")
     private boolean semanticSearchEnabled;
 
-    public FaqService(FaqCategoryMapper categoryMapper, FaqEntryMapper entryMapper, AiChatClient aiChatClient) {
+    public FaqService(FaqCategoryMapper categoryMapper, FaqEntryMapper entryMapper, EmbeddingModel embeddingModel) {
         this.categoryMapper = categoryMapper;
         this.entryMapper = entryMapper;
-        this.aiChatClient = aiChatClient;
+        this.embeddingModel = embeddingModel;
     }
 
     // ========== 分类管理 ==========
@@ -161,8 +161,8 @@ public class FaqService {
      */
     public Optional<FaqMatchResult> semanticMatch(String message) {
         try {
-            List<Double> queryVector = aiChatClient.embed(message);
-            if (queryVector == null || queryVector.isEmpty()) return Optional.empty();
+            float[] queryVector = embeddingModel.embed(message);
+            if (queryVector == null || queryVector.length == 0) return Optional.empty();
 
             List<FaqEntry> allEntries = entryMapper.selectList(
                 new QueryWrapper<FaqEntry>().eq("enabled", 1).isNotNull("question_vector"));
@@ -172,8 +172,8 @@ public class FaqService {
             List<FaqMatchResult> results = new ArrayList<>();
             for (FaqEntry entry : allEntries) {
                 List<Double> entryVec = VectorUtils.fromJson(entry.questionVector);
-                if (entryVec != null && !entryVec.isEmpty() && entryVec.size() == queryVector.size()) {
-                    double score = VectorUtils.cosineSimilarity(queryVector, entryVec);
+                if (entryVec != null && !entryVec.isEmpty() && entryVec.size() == queryVector.length) {
+                    double score = VectorUtils.cosineSimilarity(queryVector, VectorUtils.toFloatArray(entryVec));
                     results.add(new FaqMatchResult(entry, score, "semantic"));
                 }
             }
@@ -192,9 +192,13 @@ public class FaqService {
     public int rebuildVectors() {
         List<FaqEntry> entries = entryMapper.selectList(
             new QueryWrapper<FaqEntry>().eq("enabled", 1));
+        if (entries.isEmpty()) return 0;
+        // 探针：以第一条问题在当前 embedding 模型下的向量长度作为目标维度
+        int targetDim = embeddingModel.embed(entries.get(0).question).length;
         int count = 0;
         for (FaqEntry entry : entries) {
-            if (!StringUtils.hasText(entry.questionVector)) {
+            List<Double> stored = VectorUtils.fromJson(entry.questionVector);
+            if (stored == null || stored.size() != targetDim) {   // 覆盖空向量 + 维度变化
                 generateVector(entry);
                 entryMapper.updateById(entry);
                 count++;
@@ -208,8 +212,8 @@ public class FaqService {
     private void generateVector(FaqEntry entry) {
         if (!StringUtils.hasText(entry.question)) return;
         try {
-            List<Double> vec = aiChatClient.embed(entry.question);
-            entry.questionVector = VectorUtils.toJson(vec);
+            float[] vec = embeddingModel.embed(entry.question);
+            entry.questionVector = VectorUtils.toJson(VectorUtils.toList(vec));
         } catch (Exception ignored) {
             // 向量生成失败不影响主流程
         }

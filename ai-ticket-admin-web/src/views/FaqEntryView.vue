@@ -31,6 +31,15 @@
             <el-icon><Refresh /></el-icon>
             重建向量
           </el-button>
+          <el-button @click="handleExportCsv">
+            <el-icon><Download /></el-icon>
+            导出 CSV
+          </el-button>
+          <el-button @click="triggerImport">
+            <el-icon><Upload /></el-icon>
+            导入 CSV
+          </el-button>
+          <input ref="importInput" type="file" accept=".csv" style="display:none" @change="handleImportCsv" />
         </el-form-item>
       </el-form>
     </el-card>
@@ -124,10 +133,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Plus, Refresh } from '@element-plus/icons-vue'
+import { Search, Plus, Refresh, Download, Upload } from '@element-plus/icons-vue'
+import { TOKEN_KEY } from '../api/client'
 import {
   listFaqCategories, listFaqEntries, createFaqEntry, updateFaqEntry, deleteFaqEntry,
-  rebuildFaqVectors
+  rebuildFaqVectors, importFaqEntries
 } from '../api/ticket'
 
 const loading = ref(false)
@@ -136,6 +146,7 @@ const tableData = ref<any[]>([])
 const total = ref(0)
 const categories = ref<any[]>([])
 const formRef = ref<FormInstance>()
+const importInput = ref<HTMLInputElement>()
 
 const queryForm = reactive({
   page: 1,
@@ -268,6 +279,52 @@ async function toggleEnabled(row: any, val: boolean) {
   } catch (e: any) {
     row.enabled = val ? 0 : 1
     ElMessage.error(e.message || '操作失败')
+  }
+}
+
+function triggerImport() {
+  importInput.value?.click()
+}
+
+async function handleImportCsv(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  const fr = new FileReader()
+  fr.onload = async (evt) => {
+    try {
+      const csv = (evt.target as FileReader).result as string
+      const res = await importFaqEntries(csv) as any
+      ElMessage.success(`导入完成：成功 ${res.imported} 条，跳过 ${res.skipped} 条`)
+      loadData()
+    } catch (err: any) {
+      ElMessage.error(err.message || '导入失败')
+    }
+  }
+  fr.readAsText(file)
+  target.value = ''
+}
+
+async function handleExportCsv() {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
+    const res = await fetch(`${baseURL}/admin/faq/entries/export`, {
+      headers: { Authorization: token || '' }
+    })
+    if (!res.ok) throw new Error('导出失败')
+    const blob = await res.blob()
+    const disposition = res.headers.get('content-disposition') || ''
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/)
+    const filename = match ? decodeURIComponent(match[1]) : `faq-${Date.now()}.csv`
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success('导出成功')
+  } catch (err: any) {
+    ElMessage.error(err.message || '导出失败')
   }
 }
 

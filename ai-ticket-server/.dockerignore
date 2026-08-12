@@ -1,0 +1,9 @@
+# 构建上下文精简：不发送编译产物与本地 IDE 文件，加速 Docker build
+target/
+*.jar
+*.log
+.git/
+.gitignore
+.idea/
+*.iml
+.vscode/

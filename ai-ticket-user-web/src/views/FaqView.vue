@@ -105,7 +105,7 @@ import {
   Search, Collection, Document, ChatDotRound,
   HelpFilled, Top, Bottom
 } from '@element-plus/icons-vue'
-import { getCategories, getFaqEntries } from '../api/faq'
+import { getCategories, getFaqEntries, submitFaqFeedback } from '../api/faq'
 import type { FaqCategory, FaqEntry } from '../api/faq'
 
 const router = useRouter()
@@ -175,8 +175,13 @@ function goToChat() {
   router.push('/chat')
 }
 
-function handleHelpful(id: number, helpful: boolean) {
-  ElMessage.success(helpful ? '感谢您的反馈！' : '很抱歉未能帮到您，您可以去 AI 咨询获取更详细的答案。')
+async function handleHelpful(id: number, helpful: boolean) {
+  try {
+    await submitFaqFeedback(id, helpful)
+    ElMessage.success(helpful ? '感谢您的反馈！' : '很抱歉未能帮到您，您可以去 AI 咨询获取更详细的答案。')
+  } catch (e) {
+    ElMessage.success(helpful ? '感谢您的反馈！' : '很抱歉未能帮到您，您可以去 AI 咨询获取更详细的答案。')
+  }
 }
 </script>
 

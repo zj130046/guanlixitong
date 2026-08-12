@@ -1,7 +1,5 @@
 package com.aics.ticket.chat;
 
-import com.aics.ticket.ai.AiChatClient;
-import com.aics.ticket.ai.DeepSeekAiChatClient;
 import com.aics.ticket.auth.CurrentIdentity;
 import com.aics.ticket.common.BusinessException;
 import com.aics.ticket.common.enums.TicketPriority;
@@ -14,10 +12,17 @@ import com.aics.ticket.ticket.TicketService;
 import com.aics.ticket.chat.mapper.ChatConversationMapper;
 import com.aics.ticket.chat.mapper.ChatMessageMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -28,15 +33,18 @@ public class ChatService {
     private final ChatConversationMapper conversationMapper;
     private final ChatMessageMapper messageMapper;
     private final FaqService faqService;
-    private final AiChatClient aiChatClient;
+    private final ChatModel chatModel;
     private final TicketService ticketService;
 
+    @Value("${app.ai.system-prompt:你是一个智能客服助手，需要礼貌、专业、简洁地回答用户问题。如果遇到无法解答的问题，请引导用户转人工客服。}")
+    private String systemPrompt;
+
     public ChatService(ChatConversationMapper conversationMapper, ChatMessageMapper messageMapper,
-                       FaqService faqService, AiChatClient aiChatClient, TicketService ticketService) {
+                       FaqService faqService, ChatModel chatModel, TicketService ticketService) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.faqService = faqService;
-        this.aiChatClient = aiChatClient;
+        this.chatModel = chatModel;
         this.ticketService = ticketService;
     }
 
@@ -92,18 +100,22 @@ public class ChatService {
         if (match != null) {
             answer = faqAnswer(match);
         } else {
-            answer = aiChatClient.complete(request.getMessage());
+            ChatResponse resp = chatModel.call(new Prompt(List.of(
+                    new SystemMessage(systemPrompt),
+                    new UserMessage(request.getMessage()))));
+            answer = resp.getResult().getOutput().getText();
         }
 
         saveMessage(conversation.id, "AI", null, answer);
         conversationMapper.updateById(conversation);
 
-        return Map.of(
-            "conversationId", conversation.id,
-            "answer", answer,
-            "matchType", match == null ? "ai" : match.matchType,
-            "faqId", match == null ? null : match.entry.id
-        );
+        // 用 HashMap 而非 Map.of：faqId 可能为 null（Map.of 遇 null 值抛 NPE）
+        Map<String, Object> result = new HashMap<>();
+        result.put("conversationId", conversation.id);
+        result.put("answer", answer);
+        result.put("matchType", match == null ? "ai" : match.matchType);
+        result.put("faqId", match == null ? null : match.entry.id);
+        return result;
     }
 
     /**
@@ -152,32 +164,31 @@ public class ChatService {
             return;
         }
 
-        // 未命中 FAQ：走 AI 流式
+        // 未命中 FAQ：走 Spring AI 统一流式（Flux），删除原 instanceof 硬编码
         StringBuilder fullAnswer = new StringBuilder();
-        if (aiChatClient instanceof DeepSeekAiChatClient deepSeek) {
-            deepSeek.streamChat(message,
-                token -> {
-                    fullAnswer.append(token);
-                    onToken.accept(token);
-                },
-                () -> {
-                    saveMessage(conversation.id, "AI", null, fullAnswer.toString());
-                    conversationMapper.updateById(conversation);
-                    onComplete.accept(conversation.id, fullAnswer.toString());
+        Prompt prompt = new Prompt(List.of(
+                new SystemMessage(systemPrompt),
+                new UserMessage(message)));
+        chatModel.stream(prompt).subscribe(
+            resp -> {
+                String text = resp != null && resp.getResult() != null && resp.getResult().getOutput() != null
+                        ? resp.getResult().getOutput().getText() : "";
+                if (text != null && !text.isEmpty()) {
+                    fullAnswer.append(text);
+                    onToken.accept(text);
                 }
-            );
-        } else {
-            // Mock 或其他实现：用 stream() 方法返回的列表模拟流式
-            List<String> chunks = aiChatClient.stream(message);
-            for (String chunk : chunks) {
-                fullAnswer.append(chunk);
-                onToken.accept(chunk);
-                try { Thread.sleep(80); } catch (InterruptedException ignored) {}
-            }
-            saveMessage(conversation.id, "AI", null, fullAnswer.toString());
-            conversationMapper.updateById(conversation);
-            onComplete.accept(conversation.id, fullAnswer.toString());
-        }
+            },
+            err -> {
+                onToken.accept("[AI 服务异常: " + err.getMessage() + "]");
+                saveMessage(conversation.id, "AI", null, fullAnswer.toString());
+                conversationMapper.updateById(conversation);
+                onComplete.accept(conversation.id, fullAnswer.toString());
+            },
+            () -> {
+                saveMessage(conversation.id, "AI", null, fullAnswer.toString());
+                conversationMapper.updateById(conversation);
+                onComplete.accept(conversation.id, fullAnswer.toString());
+            });
     }
 
     @Transactional

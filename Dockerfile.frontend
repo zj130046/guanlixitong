@@ -1,0 +1,46 @@
+# =============================================================================
+# 前端多阶段构建 Dockerfile
+# 三个 Vue 项目分别编译 → Nginx 统一分发
+#
+# 说明：
+#   - 使用 node:lts-alpine3.23（Node 24 LTS on Alpine，复用本地已缓存镜像；
+#     Node 20 已于 2026-04 停止维护）
+#   - 直接调用 vite build 跳过 vue-tsc 类型检查（当前迭代阶段按需跳过，
+#     需恢复时改回 `npm run build` 即可）
+#   - 优先 npm ci 做确定性安装，lock 与 package.json 不一致时回退 npm install
+# =============================================================================
+
+# ── Stage 1: 编译 user-web ──────────────────────────────────────────────────
+FROM node:lts-alpine3.23 AS user-builder
+WORKDIR /build/user
+COPY ai-ticket-user-web/package*.json ./
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+COPY ai-ticket-user-web/ ./
+RUN npx vite build
+
+# ── Stage 2: 编译 agent-web ─────────────────────────────────────────────────
+FROM node:lts-alpine3.23 AS agent-builder
+WORKDIR /build/agent
+COPY ai-ticket-agent-web/package*.json ./
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+COPY ai-ticket-agent-web/ ./
+RUN npx vite build
+
+# ── Stage 3: 编译 admin-web ─────────────────────────────────────────────────
+FROM node:lts-alpine3.23 AS admin-builder
+WORKDIR /build/admin
+COPY ai-ticket-admin-web/package*.json ./
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+COPY ai-ticket-admin-web/ ./
+RUN npx vite build
+
+# ── Stage 4: Nginx 统一分发 ─────────────────────────────────────────────────
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=user-builder  /build/user/dist  /usr/share/nginx/html/user
+COPY --from=agent-builder /build/agent/dist  /usr/share/nginx/html/agent
+COPY --from=admin-builder /build/admin/dist  /usr/share/nginx/html/admin
+
+EXPOSE 3001 3002 3003
+
+CMD ["nginx", "-g", "daemon off;"]

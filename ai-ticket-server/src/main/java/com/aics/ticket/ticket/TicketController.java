@@ -2,10 +2,16 @@ package com.aics.ticket.ticket;
 
 import com.aics.ticket.common.ApiResponse;
 import com.aics.ticket.common.PageResponse;
+import com.aics.ticket.common.enums.TicketPriority;
 import com.aics.ticket.common.enums.TicketSource;
 import jakarta.validation.Valid;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -104,6 +110,26 @@ public class TicketController {
         return ApiResponse.ok(ticketService.reject(id, remark));
     }
 
+    /** 坐席归档已完结工单 */
+    @PostMapping("/agent/tickets/{id}/archive")
+    public ApiResponse<TicketRecord> archive(@PathVariable Long id,
+            @RequestBody(required = false) TicketActionRequest request) {
+        String remark = request == null ? null : request.getRemark();
+        return ApiResponse.ok(ticketService.archive(id, remark));
+    }
+
+    /** 坐席申请调整工单优先级 */
+    @PostMapping("/agent/tickets/{id}/adjust-priority")
+    public ApiResponse<TicketRecord> adjustPriority(@PathVariable Long id,
+            @RequestBody Map<String, String> request) {
+        String newPriority = request.get("priority");
+        String remark = request.getOrDefault("remark", null);
+        if (newPriority == null || newPriority.isBlank()) {
+            return ApiResponse.fail(400, "请指定新优先级");
+        }
+        return ApiResponse.ok(ticketService.adjustPriority(id, newPriority, remark));
+    }
+
     // ========== 超时预警 ==========
 
     @GetMapping("/agent/tickets/warnings")
@@ -134,6 +160,24 @@ public class TicketController {
     public ApiResponse<TicketRecord> updateAdminTicket(@PathVariable Long id,
             @RequestBody Map<String, Object> request) {
         return ApiResponse.ok(ticketService.adminUpdate(id, request));
+    }
+
+    /** 管理端导出工单 CSV */
+    @GetMapping("/admin/tickets/export")
+    public ResponseEntity<byte[]> exportTickets(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String priority,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long agentId) {
+        String csv = ticketService.exportCsv(status, category, priority, keyword, agentId);
+        byte[] bytes = csv.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String filename = "tickets-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + filename)
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(bytes);
     }
 
     // ========== 统计数据（管理端 & 坐席端都能用） ==========

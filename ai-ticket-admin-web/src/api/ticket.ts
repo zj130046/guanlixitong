@@ -1,4 +1,4 @@
-import { http } from './client'
+import { http, TOKEN_KEY } from './client'
 
 export interface Ticket {
   id: number
@@ -60,6 +60,37 @@ export function getAdminTicket(id: number | string) {
 
 export function updateAdminTicket(id: number, data: Record<string, any>) {
   return http.put<Ticket, Ticket>(`/admin/tickets/${id}`, data)
+}
+
+/** 导出工单 CSV，返回 Blob 用于下载 */
+export async function exportTickets(params?: {
+  status?: string
+  category?: string
+  priority?: string
+  keyword?: string
+  agentId?: number
+}) {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const searchParams = new URLSearchParams()
+  if (params?.status) searchParams.set('status', params.status)
+  if (params?.category) searchParams.set('category', params.category)
+  if (params?.priority) searchParams.set('priority', params.priority)
+  if (params?.keyword) searchParams.set('keyword', params.keyword)
+  if (params?.agentId) searchParams.set('agentId', String(params.agentId))
+  const url = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'}/admin/tickets/export?${searchParams}`
+  const res = await fetch(url, {
+    headers: { Authorization: token || '' }
+  })
+  if (!res.ok) throw new Error('导出失败')
+  const blob = await res.blob()
+  const disposition = res.headers.get('content-disposition') || ''
+  const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/)
+  const filename = match ? decodeURIComponent(match[1]) : `tickets-${Date.now()}.csv`
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
 }
 
 // ========== 统计数据 ==========
@@ -192,8 +223,48 @@ export function deleteFaqEntry(id: number) {
   return http.delete(`/admin/faq/entries/${id}`)
 }
 
+// ========== 月度报表 ==========
+
+export function listMonthlyReports() {
+  return http.get<any[], any[]>('/statistics/monthly-reports')
+}
+
+export function generateMonthlyReport() {
+  return http.post<any, any>('/statistics/monthly-reports/generate')
+}
+
 export function rebuildFaqVectors() {
   return http.post<any, any>('/admin/faq/vectors/rebuild')
+}
+
+// ========== FAQ 标签 ==========
+
+export function listFaqTags() {
+  return http.get<any[], any[]>('/admin/faq/tags')
+}
+
+export function createFaqTag(data: Record<string, any>) {
+  return http.post<any, any>('/admin/faq/tags', data)
+}
+
+export function deleteFaqTag(id: number) {
+  return http.delete(`/admin/faq/tags/${id}`)
+}
+
+// ========== FAQ 导入导出 ==========
+
+export function importFaqEntries(csv: string) {
+  return http.post<any, any>('/admin/faq/entries/import', { csv })
+}
+
+export function exportFaqEntries() {
+  return http.get('/admin/faq/entries/export', { responseType: 'blob' })
+}
+
+// ========== FAQ 配置 ==========
+
+export function getFaqConfig() {
+  return http.get<Record<string, any>, Record<string, any>>('/admin/faq/config')
 }
 
 export function testFaqMatch(question: string) {

@@ -2,6 +2,8 @@ import { http } from './client'
 
 export interface StatisticsOverview {
   todayConsultations: number
+  totalConversations: number
+  totalTickets: number
   aiReplyRate: number
   manualTransferRate: number
   ticketCompletionRate: number
@@ -11,6 +13,7 @@ export interface StatisticsOverview {
   completedTickets: number
   userCount: number
   agentCount: number
+  onlineAgents: number
   faqCount: number
 }
 

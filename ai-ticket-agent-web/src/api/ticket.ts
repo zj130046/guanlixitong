@@ -88,6 +88,16 @@ export function rejectTicket(id: number, remark?: string) {
   return http.post<Ticket, Ticket>(`/agent/tickets/${id}/reject`, { remark })
 }
 
+/** 坐席归档已完结工单 */
+export function archiveTicket(id: number, remark?: string) {
+  return http.post<Ticket, Ticket>(`/agent/tickets/${id}/archive`, { remark })
+}
+
+/** 坐席调整工单优先级 */
+export function adjustPriority(id: number, priority: string, remark?: string) {
+  return http.post<Ticket, Ticket>(`/agent/tickets/${id}/adjust-priority`, { priority, remark })
+}
+
 // ========== 超时预警 ==========
 
 export function timeoutWarnings() {
@@ -110,6 +120,13 @@ export function statusDistribution() {
 
 export function categoryDistribution() {
   return http.get<any[], any[]>('/agent/tickets/category-distribution')
+}
+
+// ========== 全局统计（坐席端复用） ==========
+
+/** 满意度统计 */
+export function getSatisfactionStats() {
+  return http.get<Record<string, any>, Record<string, any>>('/statistics/satisfaction-stats')
 }
 
 // ========== 坐席信息 ==========

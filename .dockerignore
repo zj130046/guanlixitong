@@ -1,0 +1,11 @@
+# 前端构建上下文（根目录）：精简发送给 Docker daemon 的内容
+# node_modules 高达数百 MB，排除后构建速度与缓存命中率显著提升
+.git
+**/node_modules
+**/dist
+**/*.log
+ai-ticket-server/target
+.DS_Store
+.idea
+.vscode
+*.iml

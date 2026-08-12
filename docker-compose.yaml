@@ -1,0 +1,119 @@
+# Compose V2 已忽略 version 字段，此处省略
+
+# =============================================================================
+# AI 智能客服工单处理系统 — Docker Compose 一键部署
+# =============================================================================
+#
+# 快速启动:
+#   docker compose up -d
+#
+# 首次启动（构建镜像）:
+#   docker compose up -d --build
+#
+# 停止:
+#   docker compose down
+#
+# 停止并清除数据:
+#   docker compose down -v
+#
+# 服务端口:
+#   用户端 (user-web)   → http://localhost:3003
+#   坐席端 (agent-web)  → http://localhost:3002
+#   管理端 (admin-web)  → http://localhost:3001
+#   后端 API            → http://localhost:8080/api
+#   Swagger 文档        → http://localhost:8080/api/swagger-ui.html
+#
+# 预置账号:
+#   user-web  : user001  / user123
+#   agent-web : agent001 / agent123
+#   admin-web : admin    / admin123
+# =============================================================================
+
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # MySQL 数据库
+  # ──────────────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: ai-ticket-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: ai_ticket
+      MYSQL_USER: ticket
+      MYSQL_PASSWORD: ticket123
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./ai-ticket-server/src/main/resources/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./ai-ticket-server/src/main/resources/sql/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ai-ticket-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Spring Boot 后端服务
+  # ──────────────────────────────────────────────────────────────────────────
+  server:
+    build:
+      context: ./ai-ticket-server
+      dockerfile: Dockerfile
+    container_name: ai-ticket-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # 数据库连接
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_ticket?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: ticket
+      SPRING_DATASOURCE_PASSWORD: ticket123
+      # AI 配置（DeepSeek / DashScope — 部署前请替换为真实 API Key）
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-your-deepseek-api-key}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com}
+      # 环境
+      SPRING_PROFILES_ACTIVE: prod
+      TZ: Asia/Shanghai
+    volumes:
+      - upload_data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - ai-ticket-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Nginx 前端服务（统一入口，三个前端）
+  # ──────────────────────────────────────────────────────────────────────────
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: ai-ticket-nginx
+    restart: unless-stopped
+    ports:
+      - "3001:3001"   # admin-web
+      - "3002:3002"   # agent-web
+      - "3003:3003"   # user-web
+    depends_on:
+      - server
+    networks:
+      - ai-ticket-net
+
+volumes:
+  mysql_data:
+    driver: local
+  upload_data:
+    driver: local
+
+networks:
+  ai-ticket-net:
+    driver: bridge

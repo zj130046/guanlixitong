@@ -146,7 +146,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Download, ArrowDown } from '@element-plus/icons-vue'
 import {
-  adminTickets, updateAdminTicket,
+  adminTickets, updateAdminTicket, exportTickets,
   statusColor, statusLabel, priorityColor, priorityLabel
 } from '../api/ticket'
 import type { Ticket } from '../api/ticket'
@@ -199,8 +199,18 @@ function handleReset() {
   loadData()
 }
 
-function handleExport() {
-  ElMessage.info('导出功能开发中...')
+async function handleExport() {
+  try {
+    await exportTickets({
+      keyword: queryForm.keyword || undefined,
+      status: queryForm.status || undefined,
+      category: queryForm.category || undefined,
+      priority: queryForm.priority || undefined
+    })
+    ElMessage.success('导出成功')
+  } catch (e: any) {
+    ElMessage.error(e.message || '导出失败')
+  }
 }
 
 function goDetail(id: number) {
@@ -215,9 +225,15 @@ function handleAction(row: Ticket, cmd: string) {
   } else if (cmd === 'assign') {
     ElMessage.info('改派功能开发中...')
   } else if (cmd === 'archive') {
-    ElMessageBox.confirm('确认归档该工单吗？', '提示', { type: 'warning' })
-      .then(() => {
-        ElMessage.success('归档成功')
+    ElMessageBox.confirm('确认归档该工单吗？（仅已完结工单可归档）', '提示', { type: 'warning' })
+      .then(async () => {
+        try {
+          await updateAdminTicket(row.id, { status: 'ARCHIVED' })
+          ElMessage.success('归档成功')
+          loadData()
+        } catch (e: any) {
+          ElMessage.error(e.message || '归档失败')
+        }
       }).catch(() => {})
   }
 }

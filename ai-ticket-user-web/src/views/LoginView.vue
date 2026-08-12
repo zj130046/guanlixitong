@@ -13,6 +13,10 @@
         <el-button type="primary" size="large" class="login-button" :loading="loading" @click="handleLogin">
           登录
         </el-button>
+        <div class="login-links">
+          <el-button text @click="$router.push('/register')">注册新账号</el-button>
+          <el-button text @click="$router.push('/reset-password')">忘记密码</el-button>
+        </div>
       </el-form>
     </el-card>
   </div>
@@ -28,8 +32,8 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({
-  username: 'demo',
-  password: 'demo123456'
+  username: 'user001',
+  password: 'user123'
 })
 
 async function handleLogin() {
@@ -50,4 +54,5 @@ async function handleLogin() {
 .login-card h1 { margin: 0 0 8px; font-size: 26px; }
 .login-card p { margin: 0 0 24px; color: #64748b; line-height: 1.6; }
 .login-button { width: 100%; }
+.login-links { display: flex; justify-content: space-between; margin-top: 12px; }
 </style>

@@ -22,6 +22,7 @@ public class TicketRecord {
     private Long assigneeAgentId;
     private Long conversationId;
     private String requesterName;
+    private String attachmentUrls;
     private LocalDateTime timeoutAt;
     private LocalDateTime completedAt;
     private LocalDateTime createdAt;
@@ -54,6 +55,8 @@ public class TicketRecord {
     public void setConversationId(Long conversationId) { this.conversationId = conversationId; }
     public String getRequesterName() { return requesterName; }
     public void setRequesterName(String requesterName) { this.requesterName = requesterName; }
+    public String getAttachmentUrls() { return attachmentUrls; }
+    public void setAttachmentUrls(String attachmentUrls) { this.attachmentUrls = attachmentUrls; }
     public LocalDateTime getTimeoutAt() { return timeoutAt; }
     public void setTimeoutAt(LocalDateTime timeoutAt) { this.timeoutAt = timeoutAt; }
     public LocalDateTime getCompletedAt() { return completedAt; }

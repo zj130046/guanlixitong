@@ -6,6 +6,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
   { path: '/login', component: () => import('../views/LoginView.vue'), meta: { title: '登录', public: true } },
+  { path: '/register', component: () => import('../views/RegisterView.vue'), meta: { title: '注册', public: true } },
   { path: '/reset-password', component: () => import('../views/ResetPasswordView.vue'), meta: { title: '重置密码', public: true } },
     {
       path: '/',

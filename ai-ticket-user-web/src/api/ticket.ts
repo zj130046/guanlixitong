@@ -14,6 +14,7 @@ export interface Ticket {
   assignee?: string
   requesterName?: string
   conversationId?: number
+  attachmentUrls?: string
   timeoutAt?: string
   completedAt?: string
   createdAt: string
@@ -48,8 +49,28 @@ export function createTicket(data: {
   category?: string
   department?: string
   priority?: string
+  attachmentUrls?: string
 }) {
   return http.post<Ticket, Ticket>('/user/tickets', data)
+}
+
+/**
+ * 上传文件，返回 { url, filename }
+ */
+export async function uploadFile(file: File): Promise<{ url: string; filename: string }> {
+  const token = localStorage.getItem('AI_TICKET_USER_TOKEN')
+  const formData = new FormData()
+  formData.append('file', file)
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
+  const res = await fetch(`${baseURL}/files/upload`, {
+    method: 'POST',
+    headers: { Authorization: token || '' },
+    body: formData
+  })
+  if (!res.ok) throw new Error('上传失败')
+  const json = await res.json()
+  if (json.code !== 0) throw new Error(json.message || '上传失败')
+  return json.data
 }
 
 export function listUserTickets(params: {

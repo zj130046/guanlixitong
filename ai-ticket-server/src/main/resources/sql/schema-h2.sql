@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS ticket (
   user_id BIGINT,
   assignee_agent_id BIGINT,
   conversation_id BIGINT,
+  attachment_urls TEXT,
   timeout_at TIMESTAMP,
   completed_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -136,6 +137,15 @@ CREATE TABLE IF NOT EXISTS satisfaction (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_satisfaction_ticket_id ON satisfaction(ticket_id);
+
+CREATE TABLE IF NOT EXISTS faq_feedback (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  entry_id BIGINT NOT NULL,
+  user_id BIGINT,
+  helpful BOOLEAN NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_faq_feedback_entry ON faq_feedback(entry_id);
 
 CREATE TABLE IF NOT EXISTS monthly_report (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,

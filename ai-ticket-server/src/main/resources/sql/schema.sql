@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS ticket (
   user_id BIGINT,
   assignee_agent_id BIGINT,
   conversation_id BIGINT,
+  attachment_urls TEXT COMMENT '附件URL列表，JSON数组字符串',
   timeout_at DATETIME,
   completed_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

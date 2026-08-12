@@ -79,22 +79,34 @@
         </el-form-item>
 
         <el-form-item label="附件上传">
-          <el-upload
-            action="#"
-            :auto-upload="false"
-            multiple
-            :limit="5"
-            :on-exceed="handleExceed"
-            class="upload-area"
-          >
-            <el-button type="primary" plain>
-              <el-icon><Upload /></el-icon>
-              选择文件
-            </el-button>
-            <template #tip>
-              <div class="el-upload__tip">支持 jpg/png/pdf 格式，单文件不超过 10MB，最多上传 5 个</div>
-            </template>
-          </el-upload>
+          <div class="upload-section">
+            <el-upload
+              :auto-upload="false"
+              multiple
+              :limit="5"
+              :on-exceed="handleExceed"
+              :on-change="handleFileChange"
+              :show-file-list="false"
+            >
+              <el-button type="primary" plain :loading="uploading">
+                <el-icon><Upload /></el-icon>
+                选择文件
+              </el-button>
+            </el-upload>
+            <span class="upload-tip" style="margin-left:12px;font-size:12px;color:#94a3b8">
+              支持 jpg/png/pdf，单文件 ≤10MB，最多 5 个
+            </span>
+            <!-- 已选文件列表 -->
+            <div v-if="uploadedFiles.length" class="file-list">
+              <el-tag
+                v-for="(f, idx) in uploadedFiles"
+                :key="idx"
+                closable
+                @close="uploadedFiles.splice(idx, 1)"
+                style="margin:4px"
+              >{{ f.name }}</el-tag>
+            </div>
+          </div>
         </el-form-item>
 
         <el-form-item>
@@ -138,7 +150,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Upload, Check, RefreshRight } from '@element-plus/icons-vue'
-import { createTicket } from '../api/ticket'
+import { createTicket, uploadFile } from '../api/ticket'
 import type { Ticket } from '../api/ticket'
 
 const router = useRouter()
@@ -146,6 +158,10 @@ const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const successVisible = ref(false)
 const createdTicket = ref<Ticket | null>(null)
+
+// 已上传的附件 URL 列表
+const uploadedFiles = ref<{ name: string; url: string }[]>([])
+const uploading = ref(false)
 
 const form = reactive({
   title: '',
@@ -175,12 +191,15 @@ async function handleSubmit() {
     if (!valid) return
     submitting.value = true
     try {
+      // 构建附件 URL JSON 数组
+      const urls = uploadedFiles.value.map(f => f.url)
       const res = await createTicket({
         title: form.title,
         description: form.description,
         category: form.category,
         department: form.department,
-        priority: form.priority
+        priority: form.priority,
+        attachmentUrls: urls.length ? JSON.stringify(urls) : undefined
       })
       createdTicket.value = res
       successVisible.value = true
@@ -192,9 +211,25 @@ async function handleSubmit() {
   })
 }
 
+/** 文件选择后先上传到服务器，再记录 URL */
+async function handleFileChange(file: any) {
+  if (!file?.raw) return
+  uploading.value = true
+  try {
+    const result = await uploadFile(file.raw)
+    uploadedFiles.value.push({ name: result.filename, url: result.url })
+  } catch (e: any) {
+    ElMessage.error(e.message || '文件上传失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
 function handleReset() {
   formRef.value?.resetFields()
   form.priority = 'NORMAL'
+  form.department = ''
+  uploadedFiles.value = []
 }
 
 function handleExceed() {
@@ -230,9 +265,8 @@ function createAgain() {
 .card-title { font-weight: 600; font-size: 18px; color: #1e293b; }
 .card-subtitle { font-size: 13px; color: #64748b; font-weight: normal; }
 
-.upload-area :deep(.el-upload) {
-  display: block;
-}
+.upload-section { width: 100%; }
+.file-list { margin-top: 8px; }
 
 .success-content { text-align: center; }
 .ticket-info {

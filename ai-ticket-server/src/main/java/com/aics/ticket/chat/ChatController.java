@@ -1,6 +1,5 @@
 package com.aics.ticket.chat;
 
-import com.aics.ticket.ai.AiChatClient;
 import com.aics.ticket.auth.CurrentIdentity;
 import com.aics.ticket.common.ApiResponse;
 import jakarta.validation.Valid;
@@ -22,7 +21,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RestController
 public class ChatController {
 
-    private final AiChatClient aiChatClient;
     private final ViolationGuardService violationGuardService;
     private final ChatService chatService;
 
@@ -39,8 +37,7 @@ public class ChatController {
         }
     );
 
-    public ChatController(AiChatClient aiChatClient, ViolationGuardService violationGuardService, ChatService chatService) {
-        this.aiChatClient = aiChatClient;
+    public ChatController(ViolationGuardService violationGuardService, ChatService chatService) {
         this.violationGuardService = violationGuardService;
         this.chatService = chatService;
     }

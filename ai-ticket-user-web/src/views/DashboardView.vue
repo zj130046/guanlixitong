@@ -134,7 +134,8 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { listUserTickets, statusColor, statusLabel } from '../api/ticket'
-import { listFaqEntries, listFaqCategories } from '../api/faq'
+import { getStatisticsOverview } from '../api/stats'
+import { listFaqEntries } from '../api/faq'
 import type { Ticket } from '../api/ticket'
 import type { FaqEntry } from '../api/faq'
 
@@ -146,32 +147,34 @@ const stats = ref({
   totalTickets: 0,
   pendingTickets: 0,
   completedTickets: 0,
-  aiReplyRate: 82
+  aiReplyRate: 0
 })
 
 const recentTickets = ref<Ticket[]>([])
 const hotFaqs = ref<FaqEntry[]>([])
 
 onMounted(() => {
+  loadStats()
   loadRecentTickets()
   loadHotFaqs()
 })
 
+/** 从统计 API 获取全局统计数据 */
+async function loadStats() {
+  try {
+    const data = await getStatisticsOverview() as any
+    stats.value.totalTickets = data.totalTickets || 0
+    stats.value.pendingTickets = data.pendingTickets || 0
+    stats.value.completedTickets = data.completedTickets || 0
+    stats.value.aiReplyRate = data.aiReplyRate || 0
+  } catch (e) { /* ignore */ }
+}
+
 async function loadRecentTickets() {
   try {
     const res = await listUserTickets({ page: 1, size: 5 }) as any
-    const records = res.records || res || []
-    recentTickets.value = records
-    stats.value.totalTickets = res.total || records.length
-    stats.value.pendingTickets = records.filter((t: Ticket) =>
-      t.status === 'ASSIGNED' || t.status === 'ACCEPTED'
-    ).length
-    stats.value.completedTickets = records.filter((t: Ticket) =>
-      t.status === 'COMPLETED'
-    ).length
-  } catch (e) {
-    // ignore
-  }
+    recentTickets.value = res.records || res || []
+  } catch (e) { /* ignore */ }
 }
 
 async function loadHotFaqs() {

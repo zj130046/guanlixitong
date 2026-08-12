@@ -43,32 +43,36 @@
       </el-card>
     </div>
 
-    <!-- 效率指标 -->
+    <!-- 效率指标（示例数据，后续对接真实 API） -->
     <el-card class="eff-card">
-      <template #header><span class="card-title">效率指标</span></template>
+      <template #header>
+        <span class="card-title">效率指标
+          <el-tag size="small" type="info" style="margin-left:8px">示例数据</el-tag>
+        </span>
+      </template>
       <el-row :gutter="24">
         <el-col :span="6">
           <div class="eff-item">
             <div class="eff-label">平均响应时间</div>
-            <div class="eff-value">12<span class="eff-unit">分钟</span></div>
+            <div class="eff-value">--<span class="eff-unit">分钟</span></div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="eff-item">
             <div class="eff-label">平均处理时长</div>
-            <div class="eff-value">2.5<span class="eff-unit">小时</span></div>
+            <div class="eff-value">--<span class="eff-unit">小时</span></div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="eff-item">
             <div class="eff-label">首次解决率</div>
-            <div class="eff-value">78<span class="eff-unit">%</span></div>
+            <div class="eff-value">--<span class="eff-unit">%</span></div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="eff-item">
             <div class="eff-label">返工率</div>
-            <div class="eff-value">5<span class="eff-unit">%</span></div>
+            <div class="eff-value">--<span class="eff-unit">%</span></div>
           </div>
         </el-col>
       </el-row>
@@ -79,13 +83,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, reactive } from 'vue'
 import * as echarts from 'echarts'
-import { agentOverview, ticketTrend, categoryDistribution } from '../api/ticket'
+import { agentOverview, ticketTrend, categoryDistribution, getSatisfactionStats } from '../api/ticket'
 
 const trendDays = ref(7)
 const stats = reactive({
   completedTickets: 0,
   completionRate: 0,
-  satisfactionScore: 4.8,
+  satisfactionScore: 0 as number | string,
   processingTickets: 0
 })
 
@@ -118,12 +122,20 @@ function handleResize() {
 
 async function loadStats() {
   try {
-    const data = await agentOverview()
-    stats.completedTickets = Number(data.completedTickets || 0)
-    stats.processingTickets = Number(data.processingTickets || 0)
-    const total = Number(data.totalTickets || 0)
+    const [overviewData, satData] = await Promise.all([
+      agentOverview(),
+      getSatisfactionStats()
+    ])
+    stats.completedTickets = Number(overviewData.completedTickets || 0)
+    stats.processingTickets = Number(overviewData.processingTickets || 0)
+    const total = Number(overviewData.totalTickets || 0)
     stats.completionRate = total > 0 ? Math.round(stats.completedTickets * 100 / total) : 0
-  } catch (e) { /* ignore */ }
+    // 从全局满意度统计获取平均分
+    const avg = satData?.averageScore
+    stats.satisfactionScore = avg != null ? avg : '—'
+  } catch (e) {
+    stats.satisfactionScore = '—'
+  }
 }
 
 async function loadTrend() {
