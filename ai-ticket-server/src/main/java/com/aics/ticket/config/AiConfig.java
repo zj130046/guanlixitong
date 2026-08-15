@@ -75,7 +75,7 @@ public class AiConfig {
             return DashScopeChatModel.builder()
                     .dashScopeApi(DashScopeApi.builder()
                             .apiKey(dscApiKey)
-                            .baseUrl(dscBaseUrl)
+                            .baseUrl(dashScopeBaseUrl(dscBaseUrl))
                             .build())
                     .defaultOptions(DashScopeChatOptions.builder().withModel(dscChatModel).build())
                     .build();
@@ -90,9 +90,27 @@ public class AiConfig {
         if ("dashscope".equalsIgnoreCase(embeddingProvider) && StringUtils.hasText(dscApiKey)) {
             return new DashScopeEmbeddingModel(DashScopeApi.builder()
                     .apiKey(dscApiKey)
-                    .baseUrl(dscBaseUrl)
+                    .baseUrl(dashScopeBaseUrl(dscBaseUrl))
                     .build());
         }
         return new MockEmbeddingModel();
+    }
+
+    /**
+     * DashScope base-url 归一化：DashScopeApi 内部固定拼接 `/api/v1/services/...`，
+     * 配置值必须只写 host。此处容错去掉末尾斜杠与 `/api/v1` 前缀（防止拼成 `/api/v1/api/v1/...` 404）。
+     */
+    private String dashScopeBaseUrl(String baseUrl) {
+        if (baseUrl == null) return null;
+        String url = baseUrl.trim();
+        while (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        String lower = url.toLowerCase();
+        String suffix = "/api/v1";
+        if (lower.endsWith(suffix)) {
+            url = url.substring(0, url.length() - suffix.length());
+        }
+        return url;
     }
 }

@@ -144,6 +144,115 @@ cd ai-ticket-agent-web && npm install && npm run dev   # 坐席端 :3002
 cd ai-ticket-admin-web && npm install && npm run dev   # 管理端 :3001
 ```
 
+## AI 功能配置（后端）
+
+后端 AI 功能基于 **Spring AI 1.0.0**，通过 `application.yml` 的 `app.ai` 配置驱动，支持 **DeepSeek / DashScope / Mock** 三种提供商；对话模型与向量模型可独立指定。
+
+### 配置项总览
+
+| 配置 | 位置 | 说明 | 默认值 |
+|------|------|------|--------|
+| `app.ai.provider` | application.yml | 对话模型提供商（mock/deepseek/dashscope） | `mock` |
+| `app.ai.embedding-provider` | application.yml | 向量模型提供商（mock/dashscope） | `mock` |
+| `app.ai.system-prompt` | application.yml | AI 系统提示词 | 智能客服默认话术 |
+| `app.ai.stream-timeout-seconds` | application.yml | SSE 流式超时（秒） | `120` |
+| `app.ai.deepseek.api-key` | yml / `DEEPSEEK_API_KEY` | DeepSeek API Key | 空 |
+| `app.ai.deepseek.base-url` | yml / `DEEPSEEK_BASE_URL` | DeepSeek 地址（**只写 host**） | `https://api.deepseek.com` |
+| `app.ai.deepseek.completions-path` | application.yml | 对话接口路径 | `/v1/chat/completions` |
+| `app.ai.deepseek.chat-model` | application.yml | DeepSeek 对话模型 | `deepseek-chat` |
+| `app.ai.deepseek.temperature` | application.yml | 采样温度 | `0.7` |
+| `app.ai.dashscope.api-key` | yml / `DASHSCOPE_API_KEY` | 阿里云百炼 API Key | 空 |
+| `app.ai.dashscope.base-url` | yml / `DASHSCOPE_BASE_URL` | 百炼 API 地址（**只写 host，勿带 /api/v1**） | `https://dashscope.aliyuncs.com` |
+| `app.ai.dashscope.chat-model` | application.yml | 百炼对话模型 | `qwen-plus` |
+| `app.ai.dashscope.embed-model` | application.yml | 百炼向量模型 | `text-embedding-v2` |
+| `app.faq.similarity-threshold` | application.yml | FAQ 语义匹配阈值 | `0.72` |
+| `app.faq.semantic-search-enabled` | application.yml | 是否启用语义检索 | `true` |
+
+### Provider 选择逻辑
+
+对话模型（`app.ai.provider`）：
+
+| 配置值 | 条件 | 实际模型 | 说明 |
+|--------|------|----------|------|
+| `deepseek` | Key 非空 | `OpenAiChatModel` | OpenAI 兼容，`base-url`+`completions-path` 拼接请求地址 |
+| `dashscope` | Key 非空 | `DashScopeChatModel` | 默认模型 `qwen-plus` |
+| `mock` 或缺 Key | — | `MockChatModel` | 模板回复，无 Key 也能跑通全流程 |
+
+向量模型（`app.ai.embedding-provider`）：
+
+| 配置值 | 条件 | 实际模型 | 说明 |
+|--------|------|----------|------|
+| `dashscope` | Key 非空 | `DashScopeEmbeddingModel` | 默认模型 `text-embedding-v2` |
+| 其他 / 缺 Key | — | `MockEmbeddingModel` | 64 维确定性伪向量（基于文本哈希） |
+
+### 推荐组合
+
+> **DeepSeek 不提供 embedding API**，对话用 DeepSeek、向量用 DashScope 是推荐组合：
+>
+> ```yaml
+> app:
+>   ai:
+>     provider: deepseek
+>     embedding-provider: dashscope
+> ```
+> 需要同时配置 `DEEPSEEK_API_KEY` 与 `DASHSCOPE_API_KEY`；只配一个也能启动（缺的那个自动回退 Mock）。
+
+### 配置方式
+
+**方式一：环境变量（推荐，Docker / 生产）**
+
+```bash
+export DEEPSEEK_API_KEY=sk-xxx
+export DEEPSEEK_BASE_URL=https://api.deepseek.com      # 只写 host
+export DASHSCOPE_API_KEY=sk-xxx
+export DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com
+docker compose up -d --build
+```
+
+**方式二：直接修改 `ai-ticket-server/src/main/resources/application.yml`（本地开发）**
+
+```yaml
+app:
+  ai:
+    provider: dashscope            # mock | deepseek | dashscope
+    embedding-provider: dashscope  # mock | dashscope
+    deepseek:
+      api-key: sk-xxx
+      base-url: https://api.deepseek.com   # 只写 host，勿带 /v1（否则会拼成 /v1/v1/...）
+      completions-path: /v1/chat/completions
+      chat-model: deepseek-chat
+    dashscope:
+      api-key: sk-xxx
+      base-url: https://dashscope.aliyuncs.com   # 只写 host，勿带 /api/v1（库内自动拼接 /api/v1/services/...）
+      chat-model: qwen-plus
+      embed-model: text-embedding-v2
+```
+
+### FAQ 语义检索
+
+- `app.faq.similarity-threshold`：语义匹配分数达到该值才算命中（默认 0.72）。
+- `app.faq.semantic-search-enabled: false` 可关闭语义检索，仅保留关键词 / 模糊匹配。
+- 匹配链路逐级降级：**语义 → 关键词 → 模糊 → 交由大模型**。
+
+### ⚠️ 切换向量模型后需重建向量
+
+不同向量模型**维度不同**（Mock=64 维，DashScope text-embedding 为千维）。切换 `embedding-provider` 后，旧的 FAQ 向量因维度不匹配会被跳过，需重建：
+
+```bash
+# 管理端 → FAQ → 相似度配置 → 重建向量
+# 或直接调用接口（需 admin token）：
+curl -X POST http://localhost:8080/api/admin/faq/vectors/rebuild \
+  -H "Authorization: <admin-token>"
+```
+
+`rebuildVectors` 会自动探测当前模型维度，并重建所有**空向量 / 维度不匹配**的条目，无需人工干预。
+
+### 其他说明
+
+- **无 Key 不崩**：任一 provider 缺 Key 都会回退 Mock，对话 / FAQ / 统计全流程仍可运行。
+- **扩展新提供商**：加一个 Maven 依赖 + `AiConfig` 一个分支 + 一段配置即可。
+- **排查**：`/api/chat/messages` 返回 Mock 模板话术，说明未配置 Key 或 Key 无效，检查对应环境变量；管理端 admin 接口若返回 403，请确认登录的是管理员账号（角色来自登录 ID 前缀）。
+
 ## 技术栈
 
 | 层次 | 技术 | 版本 |
