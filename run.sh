@@ -207,6 +207,20 @@ smoke_chat() {
 }
 
 # =============================================================================
+# 文档（需求说明书）
+# =============================================================================
+
+# 需求说明书 md → docx（pandoc --toc 生成 Word 多级目录）；参数 [md] [out]，默认 ref/require_doc.md
+ref_docx() {
+  require pandoc || return 1
+  local md="${1:-${ROOT}/ref/require_doc.md}"
+  local out="${2:-${md%.md}.docx}"
+  info "转换 ${md} → ${out}"
+  pandoc "$md" -o "$out" --toc --toc-depth=3
+  ok "生成: ${out}"
+}
+
+# =============================================================================
 # 工具
 # =============================================================================
 
@@ -242,6 +256,9 @@ Docker:
   smoke_health [端口]
   smoke_login [user|agent|admin] [端口]
   smoke_chat [端口] [消息]
+
+文档:
+  ref_docx [md] [out]      需求说明书 md → docx (含多级目录, 需 pandoc)
 
 工具:
   port_check <端口>        查看端口占用
